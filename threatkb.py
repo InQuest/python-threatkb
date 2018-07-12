@@ -12,11 +12,14 @@ import requests
 import json
 import sys
 import os
-import ConfigParser
 import stat
 import argparse
 import logging
-from StringIO import StringIO
+from io import StringIO
+try:
+    from ConfigParser import ConfigParser
+except ImportError:
+    from configparser import ConfigParser
 
 CREDENTIALS_FILE = os.path.expanduser('~/.threatkb/credentials')
 API_KEY = None
@@ -74,7 +77,7 @@ class ThreatKB:
                     results.append(dict(zip(self.filter_on_keys, [obj[k] for k in self.filter_on_keys])))
                 return results
                 # return project(o, self.filter_on_keys)
-        except Exception, e:
+        except Exception as e:
             return output
 
     def get(self, endpoint, id_=None, params={}):
@@ -103,7 +106,7 @@ class ThreatKB:
 def initialize():
     global API_KEY, SECRET_KEY, API_HOST, THREATKB_CLI, FILTER_KEYS
 
-    config = ConfigParser.ConfigParser()
+    config = ConfigParser()
     try:
         config.read(CREDENTIALS_FILE)
         API_TOKEN = config.get("default", "token")
@@ -124,7 +127,7 @@ def configure():
 
     try:
         initialize()
-    except Exception, e:
+    except Exception as e:
         pass
 
     try:
@@ -138,7 +141,7 @@ def configure():
     API_HOST = raw_input(
         "API Host [%s]: " % ("%s%s" % ("*" * (len(API_HOST) - 3), API_HOST[-3:]) if API_HOST else "*" * 10))
 
-    config = ConfigParser.ConfigParser()
+    config = ConfigParser()
     config.readfp(StringIO('[default]'))
     config.set('default', 'token', API_KEY)
     config.set('default', 'secret_key', SECRET_KEY)
@@ -154,15 +157,15 @@ def attach(params):
 
     try:
         artifact, artifact_id, file = params[1:]
-    except Exception, e:
+    except Exception as e:
         help(extra_text="""%s attach <artifact> <artifact_id> <file>
         
         artifact: yara_rule, c2dns, c2ip, task
         artifact_id: artifact id as an integer
         file: the file to attach to the entity""" % (params[0]), params=params)
 
-    print THREATKB_CLI.create("file_upload",
-                              files={"entity_type": artifact, "entity_id": artifact_id, "file": open(file, 'rb')})
+    print(THREATKB_CLI.create("file_upload",
+                              files={"entity_type": artifact, "entity_id": artifact_id, "file": open(file, 'rb')}))
 
 
 def comment(params):
@@ -170,15 +173,15 @@ def comment(params):
 
     try:
         artifact, artifact_id, comment = params[1:]
-    except Exception, e:
+    except Exception as e:
         help(extra_text="""%s comment <artifact> <artifact_id> <comment>
         
         artifact: yara_rule, c2dns, c2ip, task
         artifact_id: artifact id as an integer
         comment: the comment to add to the artifact""" % (params[0]), params=params)
 
-    print THREATKB_CLI.create("comments", json.dumps(
-        {"comment": comment, "entity_type": ENTITY_TYPES.get(artifact), "entity_id": artifact_id}))
+    print(THREATKB_CLI.create("comments", json.dumps(
+        {"comment": comment, "entity_type": ENTITY_TYPES.get(artifact), "entity_id": artifact_id})))
 
 
 def release(params):
@@ -186,10 +189,10 @@ def release(params):
 
     try:
         release_id = params[1]
-    except Exception, e:
+    except Exception as e:
         release_id = None
 
-    print THREATKB_CLI.get("releases", release_id, {"short": 0})
+    print(THREATKB_CLI.get("releases", release_id, {"short": 0}))
 
 
 def search(params):
@@ -197,13 +200,13 @@ def search(params):
 
     try:
         filter_, filter_text = params[1:]
-    except Exception, e:
+    except Exception as e:
         help(extra_text="""%s search <filter> <filter_text>
         
         filter: all, tag, state, category
         filter_text: text to filter on""" % (params[0]), params=params)
 
-    print THREATKB_CLI.get("search", params={filter_: filter_text})
+    print(THREATKB_CLI.get("search", params={filter_: filter_text}))
 
 
 def help(params, extra_text="", exit=True):
@@ -248,7 +251,7 @@ def main():
     try:
         action = params[0]
     except:
-        print help(sys.argv)
+        print(help(sys.argv))
         sys.exit(1)
 
     if args.filter_keys_only:
