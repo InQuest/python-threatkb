@@ -37,7 +37,7 @@ LOG = logging.getLogger()
 
 
 class ThreatKB:
-    def __init__(self, host, token, secret_key, filter_on_keys=[], base_uri='ThreatKB/', use_https=True, log=LOG):
+    def __init__(self, host, token, secret_key, filter_on_keys=[], base_uri='ThreatKB/', use_https=False, log=LOG):
         self.host = host.lower().replace("http://", "").replace("https://", "")
         self.token = token
         self.secret_key = secret_key
@@ -56,7 +56,8 @@ class ThreatKB:
         self.log.debug("Sending %s API request to: %s" % (method, url))
         # Try hitting the uri
         if files:
-            response = self.session.request(method, url, params=uri_params, data=body, verify=False, files=files)
+            response = self.session.request(method, url, params=uri_params, json=body, verify=False, headers=headers)
+
         else:
             response = self.session.request(method, url, params=uri_params, data=body, verify=False, headers=headers)
 
