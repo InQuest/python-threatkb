@@ -56,10 +56,10 @@ class ThreatKB:
         self.log.debug("Sending %s API request to: %s" % (method, url))
         # Try hitting the uri
         if files:
-            response = self.session.request(method, url, params=uri_params, json=body, verify=False, headers=headers)
+            response = self.session.request(method, url, params=uri_params, json=body, files=files, verify=False, headers=headers)
 
         else:
-            response = self.session.request(method, url, params=uri_params, data=body, verify=False, headers=headers)
+            response = self.session.request(method, url, params=uri_params, json=body, verify=False, headers=headers)
 
         if response.status_code == 401:
             raise Exception("Invalid authentication token and secret key.")
