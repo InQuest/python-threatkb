@@ -19,7 +19,6 @@ Python ThreatKB API
 
 Python library and command-line tool for `InQuest ThreatKB`_.
 
-
 Contributing
 ------------
 
