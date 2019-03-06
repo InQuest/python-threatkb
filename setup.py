@@ -13,7 +13,7 @@ setup(
     py_modules=[
         'threatkb',
     ],
-    install_requires=[],
+    install_requires=['requests'],
     entry_points={
           'console_scripts': [
               'threatkb = threatkb:main'
