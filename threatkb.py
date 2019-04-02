@@ -84,7 +84,7 @@ class ThreatKB:
     def get(self, endpoint, id_=None, params={}):
         """If index is None, list all; else get one"""
         r = self._request('GET', endpoint + ('/' + str(id_) if id_ else ''), uri_params=params)
-        return self.filter_output(r.content)
+        return r.content
 
     def update(self, endpoint, id_, json_data):
         r = self._request('PUT', '/'.join(endpoint, id_), json_data)
@@ -102,6 +102,53 @@ class ThreatKB:
         if r.status_code == 412:
             return None
         return r.content
+
+
+class ThreatKBHelper(ThreatKB):
+    """Higher-level ThreatKB operations"""
+
+    def get_rule(self, rule_id):
+        return json.loads(self.get('/yara_rules'. id_=rule_id))
+
+
+    def get_rule_id_by_name(self, name):
+        """Search for a rule by name.
+
+        :returns: list of ids
+        """
+        params = {
+            'searches': '{{"name": "{name}"}}'.format(name=name),
+        }
+        results = json.loads(self.get('/yara_rules', params=params).content)
+
+        ids = []
+        if results["total_count"]:
+            for item in results["data"]:
+                ids.append(item["id"])
+
+        return ids
+
+
+    def delete_rule(self, rule_id):
+        return self.delete('/yara_rules', id_=rule_id).ok
+
+
+    def delete_rule_batch(self, rule_ids):
+        return self.put('/yara_rules/delete', data={"batch": ids}).ok
+
+
+    def delete_rule_by_name(self, name):
+        ids = get_rule_id_by_name(name)
+
+        if ids:
+            return delete_rule_batch(ids)
+
+
+    def discard_rule(self, rule_id):
+        rule = get_rule(rule_id)
+
+        rule['state'] = 'Discarded'
+        return self.put('/yara_rules', id_=rule_id, data=json.dumps(rule)).ok
 
 
 def initialize():
