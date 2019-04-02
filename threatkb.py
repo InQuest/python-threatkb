@@ -119,7 +119,7 @@ class ThreatKBHelper(ThreatKB):
         params = {
             'searches': '{{"name": "{name}"}}'.format(name=name),
         }
-        results = json.loads(self.get('/yara_rules', params=params).content)
+        results = json.loads(self.get('/yara_rules', params=params))
 
         ids = []
         if results["total_count"]:
@@ -130,11 +130,11 @@ class ThreatKBHelper(ThreatKB):
 
 
     def delete_rule(self, rule_id):
-        return self.delete('/yara_rules', id_=rule_id).ok
+        return self.delete('/yara_rules', id_=rule_id)
 
 
     def delete_rule_batch(self, rule_ids):
-        return self.put('/yara_rules/delete', data={"batch": ids}).ok
+        return self.put('/yara_rules/delete', data={"batch": ids})
 
 
     def delete_rule_by_name(self, name):
@@ -148,7 +148,7 @@ class ThreatKBHelper(ThreatKB):
         rule = get_rule(rule_id)
 
         rule['state'] = 'Discarded'
-        return self.put('/yara_rules', id_=rule_id, data=json.dumps(rule)).ok
+        return self.put('/yara_rules', id_=rule_id, data=json.dumps(rule))
 
 
 def initialize():
