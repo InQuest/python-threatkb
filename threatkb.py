@@ -151,6 +151,57 @@ class ThreatKBHelper(ThreatKB):
         return self.put('/yara_rules', id_=rule_id, data=json.dumps(rule))
 
 
+    def delete_c2dns(self, id_):
+        return self.delete('/c2dns', id_=id_)
+
+
+    def delete_c2ips(self, id_):
+        return self.delete('/c2ips', id_=id_)
+
+
+    def get_c2ips_id(self, ip):
+        params = {
+            'searches': '{{"ip":"{ip}"}}'.format(ip=ip)
+        }
+        results = json.loads(self.get('/c2ips', params=params))
+
+        if results["total_count"]:
+            for item in results["data"]:
+                # We are only matching the first one.
+                return item["id"]
+
+
+    def get_c2ips_comments(self, ip):
+        id_ = self.get_c2ips_id(ip)
+        params = {
+            'entity_type': 3,
+            'entity_id': id_,
+        }
+
+        if id_:
+            return json.loads(self.get('/comments', params=params))
+
+        else:
+            print("IP not found")
+            return None
+
+
+    def squelch_check(self, ip, days):
+        # Returns true if comment exists in the last x days.
+        comments = self.get_c2ips_comments(ip)
+
+        for comment in comments:
+            check_date = datetime.now() - timedelta(days=int(days))
+            date_modified = datetime.strptime(
+                comment["date_modified"], "%Y-%m-%dT%H:%M:%S")
+
+            if check_date < date_modified:
+                # Flagged, lets return and not check the other comments
+                return True
+
+        return False
+
+
 def initialize():
     global API_KEY, SECRET_KEY, API_HOST, THREATKB_CLI, FILTER_KEYS
 
