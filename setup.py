@@ -8,7 +8,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
     name='threatkb',
-    version='1.0.0-alpha1',
+    version='1.0.0-alpha2',
     include_package_data=True,
     py_modules=[
         'threatkb',
