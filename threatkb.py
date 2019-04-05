@@ -15,11 +15,13 @@ import os
 import stat
 import argparse
 import logging
+import datetime
 from io import StringIO
 try:
     from ConfigParser import ConfigParser
 except ImportError:
     from configparser import ConfigParser
+    raw_input = input
 
 CREDENTIALS_FILE = os.path.expanduser('~/.threatkb/credentials')
 API_KEY = None
@@ -86,13 +88,13 @@ class ThreatKB:
         r = self._request('GET', endpoint + ('/' + str(id_) if id_ else ''), uri_params=params)
         return r.content
 
-    def update(self, endpoint, id_, json_data):
-        r = self._request('PUT', '/'.join(endpoint, id_), json_data)
+    def update(self, endpoint, id_=None, json_data={}):
+        r = self._request('PUT', endpoint + ('/' + str(id_) if id_ else ''), body=json_data)
         return r.content
 
     def delete(self, endpoint, id_):
         """True if '200 OK' else False"""
-        return self._request('DELETE', '/'.join(endpoint, id_)).status_code == 200
+        return self._request('DELETE', '/'.join([endpoint, id_])).status_code == 200
 
     def create(self, endpoint, json_data={}, files={}):
         if files:
@@ -108,7 +110,7 @@ class ThreatKBHelper(ThreatKB):
     """Higher-level ThreatKB operations"""
 
     def get_rule(self, rule_id):
-        return json.loads(self.get('/yara_rules'. id_=rule_id))
+        return json.loads(self.get('/yara_rules', id_=rule_id))
 
 
     def get_rule_id_by_name(self, name):
@@ -134,21 +136,21 @@ class ThreatKBHelper(ThreatKB):
 
 
     def delete_rule_batch(self, rule_ids):
-        return self.put('/yara_rules/delete', data={"batch": ids})
+        return self.update('/yara_rules/delete', json_data={"batch": rule_ids})
 
 
     def delete_rule_by_name(self, name):
-        ids = get_rule_id_by_name(name)
+        ids = self.get_rule_id_by_name(name)
 
         if ids:
-            return delete_rule_batch(ids)
+            return self.delete_rule_batch(ids)
 
 
     def discard_rule(self, rule_id):
-        rule = get_rule(rule_id)
+        rule = self.get_rule(rule_id)
 
         rule['state'] = 'Discarded'
-        return self.put('/yara_rules', id_=rule_id, data=json.dumps(rule))
+        return self.update('/yara_rules', id_=rule_id, json_data=json.dumps(rule))
 
 
     def delete_c2dns(self, id_):
@@ -191,8 +193,8 @@ class ThreatKBHelper(ThreatKB):
         comments = self.get_c2ips_comments(ip)
 
         for comment in comments:
-            check_date = datetime.now() - timedelta(days=int(days))
-            date_modified = datetime.strptime(
+            check_date = datetime.datetime.now() - datetime.timedelta(days=int(days))
+            date_modified = datetime.datetime.strptime(
                 comment["date_modified"], "%Y-%m-%dT%H:%M:%S")
 
             if check_date < date_modified:
