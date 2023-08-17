@@ -1,8 +1,6 @@
 #!/bin/env python
 """Client class.
-
-Usage::
-
+Usage:
     import threatkb
     api = threatkb.ThreatKB('http://127.0.0.1:9000', 'user@email.tld', 'password')
     api.create('c2dns', {'domain_name': 'example.com', ... })
@@ -15,14 +13,20 @@ import os
 import stat
 import argparse
 import logging
-import datetime
-from io import StringIO
-try:
-    from ConfigParser import ConfigParser
-except ImportError:
-    from configparser import ConfigParser
-    raw_input = input
 
+# python2/3 compatability hacks.
+try:
+    import configparser
+except:
+    from configparser import ConfigParser
+
+try:
+    from io import StringIO
+except ImportError:
+    from io import StringIO
+
+raw_input = input
+    
 CREDENTIALS_FILE = os.path.expanduser('~/.threatkb/credentials')
 API_KEY = None
 SECRET_KEY = None
@@ -39,7 +43,7 @@ LOG = logging.getLogger()
 
 
 class ThreatKB:
-    def __init__(self, host, token, secret_key, filter_on_keys=[], base_uri='ThreatKB/', use_https=False, log=LOG):
+    def __init__(self, host, token, secret_key, filter_on_keys=[], base_uri='/ThreatKB/', use_https=True, log=LOG):
         self.host = host.lower().replace("http://", "").replace("https://", "")
         self.token = token
         self.secret_key = secret_key
@@ -49,17 +53,23 @@ class ThreatKB:
         self.filter_on_keys = filter_on_keys
         self.session = requests.Session()
 
+        # ensure base URI is wrapped in slashes or, if not specified, is a slash.
+        if self.base_uri:
+            if not self.base_uri.startswith("/"):
+                self.base_uri = "/" + self.base_uri
+            if not self.base_uri.endswith("/"):
+                self.base_uri = self.base_uri + "/"
+        else:
+            self.base_uri = "/"
+        
     def _request(self, method, uri, uri_params={}, body=None, files={},
                  headers={"Content-Type": "application/json;charset=UTF-8"}):
         uri_params["token"] = self.token
         uri_params["secret_key"] = self.secret_key
         url = "%s://%s%s%s" % ("https" if self.use_https else "http", self.host, self.base_uri, uri)
-
-        self.log.debug("Sending %s API request to: %s" % (method, url))
         # Try hitting the uri
         if files:
-            response = self.session.request(method, url, params=uri_params, json=body, files=files, verify=False, headers=headers)
-
+            response = self.session.request(method, url, params=uri_params, data=body, verify=False, files=files)
         else:
             response = self.session.request(method, url, params=uri_params, json=body, verify=False, headers=headers)
 
@@ -73,28 +83,29 @@ class ThreatKB:
 
             o = json.loads(output)
             if type(o) == dict:
-                return dict(zip(self.filter_on_keys, [o[k] for k in self.filter_on_keys]))
+                return o
+                # return dict(zip(self.filter_on_keys, [o[k] for k in self.filter_on_keys]))
             else:
                 results = []
                 for obj in o:
-                    results.append(dict(zip(self.filter_on_keys, [obj[k] for k in self.filter_on_keys])))
+                    results.append(dict(list(zip(self.filter_on_keys, [obj[k] for k in self.filter_on_keys]))))
                 return results
                 # return project(o, self.filter_on_keys)
-        except Exception as e:
+        except Exception:
             return output
 
     def get(self, endpoint, id_=None, params={}):
         """If index is None, list all; else get one"""
         r = self._request('GET', endpoint + ('/' + str(id_) if id_ else ''), uri_params=params)
-        return r.content
+        return self.filter_output(r.content)
 
-    def update(self, endpoint, id_=None, json_data={}):
-        r = self._request('PUT', endpoint + ('/' + str(id_) if id_ else ''), body=json_data)
+    def update(self, endpoint, id_, json_data):
+        r = self._request('PUT', '/'.join(endpoint, id_), json_data)
         return r.content
 
     def delete(self, endpoint, id_):
         """True if '200 OK' else False"""
-        return self._request('DELETE', '/'.join([endpoint, id_])).status_code == 200
+        return self._request('DELETE', '/'.join(endpoint, id_)).status_code == 200
 
     def create(self, endpoint, json_data={}, files={}):
         if files:
@@ -104,104 +115,6 @@ class ThreatKB:
         if r.status_code == 412:
             return None
         return r.content
-
-
-class ThreatKBHelper(ThreatKB):
-    """Higher-level ThreatKB operations"""
-
-    def get_rule(self, rule_id):
-        return json.loads(self.get('/yara_rules', id_=rule_id))
-
-
-    def get_rule_id_by_name(self, name):
-        """Search for a rule by name.
-
-        :returns: list of ids
-        """
-        params = {
-            'searches': '{{"name": "{name}"}}'.format(name=name),
-        }
-        results = json.loads(self.get('/yara_rules', params=params))
-
-        ids = []
-        if results["total_count"]:
-            for item in results["data"]:
-                ids.append(item["id"])
-
-        return ids
-
-
-    def delete_rule(self, rule_id):
-        return self.delete('/yara_rules', id_=rule_id)
-
-
-    def delete_rule_batch(self, rule_ids):
-        return self.update('/yara_rules/delete', json_data={"batch": rule_ids})
-
-
-    def delete_rule_by_name(self, name):
-        ids = self.get_rule_id_by_name(name)
-
-        if ids:
-            return self.delete_rule_batch(ids)
-
-
-    def discard_rule(self, rule_id):
-        rule = self.get_rule(rule_id)
-
-        rule['state'] = 'Discarded'
-        return self.update('/yara_rules', id_=rule_id, json_data=json.dumps(rule))
-
-
-    def delete_c2dns(self, id_):
-        return self.delete('/c2dns', id_=id_)
-
-
-    def delete_c2ips(self, id_):
-        return self.delete('/c2ips', id_=id_)
-
-
-    def get_c2ips_id(self, ip):
-        params = {
-            'searches': '{{"ip":"{ip}"}}'.format(ip=ip)
-        }
-        results = json.loads(self.get('/c2ips', params=params))
-
-        if results["total_count"]:
-            for item in results["data"]:
-                # We are only matching the first one.
-                return item["id"]
-
-
-    def get_c2ips_comments(self, ip):
-        id_ = self.get_c2ips_id(ip)
-        params = {
-            'entity_type': 3,
-            'entity_id': id_,
-        }
-
-        if id_:
-            return json.loads(self.get('/comments', params=params))
-
-        else:
-            print("IP not found")
-            return None
-
-
-    def squelch_check(self, ip, days):
-        # Returns true if comment exists in the last x days.
-        comments = self.get_c2ips_comments(ip)
-
-        for comment in comments:
-            check_date = datetime.datetime.now() - datetime.timedelta(days=int(days))
-            date_modified = datetime.datetime.strptime(
-                comment["date_modified"], "%Y-%m-%dT%H:%M:%S")
-
-            if check_date < date_modified:
-                # Flagged, lets return and not check the other comments
-                return True
-
-        return False
 
 
 def initialize():
@@ -228,7 +141,7 @@ def configure():
 
     try:
         initialize()
-    except Exception as e:
+    except Exception:
         pass
 
     try:
@@ -236,10 +149,10 @@ def configure():
     except:
         pass
 
-    API_KEY = raw_input("Token [%s]: " % ("%s%s" % ("*" * (len(API_KEY) - 3), API_KEY[-3:]) if API_KEY else "*" * 10))
-    SECRET_KEY = raw_input(
+    API_KEY = input("Token [%s]: " % ("%s%s" % ("*" * (len(API_KEY) - 3), API_KEY[-3:]) if API_KEY else "*" * 10))
+    SECRET_KEY = input(
         "Secret Key [%s]: " % ("%s%s" % ("*" * (len(SECRET_KEY) - 3), SECRET_KEY[-3:]) if SECRET_KEY else "*" * 10))
-    API_HOST = raw_input(
+    API_HOST = input(
         "API Host [%s]: " % ("%s%s" % ("*" * (len(API_HOST) - 3), API_HOST[-3:]) if API_HOST else "*" * 10))
 
     config = ConfigParser()
@@ -247,7 +160,7 @@ def configure():
     config.set('default', 'token', API_KEY)
     config.set('default', 'secret_key', SECRET_KEY)
     config.set('default', 'api_host', API_HOST)
-    with open(CREDENTIALS_FILE, "wb") as configfile:
+    with open(CREDENTIALS_FILE, "w+") as configfile:
         config.write(configfile)
 
     os.chmod(CREDENTIALS_FILE, stat.S_IRUSR | stat.S_IWUSR)
@@ -259,14 +172,15 @@ def attach(params):
     try:
         artifact, artifact_id, file = params[1:]
     except Exception as e:
-        help(extra_text="""%s attach <artifact> <artifact_id> <file>
+        print(help(extra_text="""%s attach <artifact> <artifact_id> <file>
         
         artifact: yara_rule, c2dns, c2ip, task
         artifact_id: artifact id as an integer
-        file: the file to attach to the entity""" % (params[0]), params=params)
+        file: the file to attach to the entity""" % (params[0]), params=params))
+        sys.exit(1)
 
-    print(THREATKB_CLI.create("file_upload",
-                              files={"entity_type": artifact, "entity_id": artifact_id, "file": open(file, 'rb')}))
+    print((THREATKB_CLI.create("file_upload",
+                              files={"entity_type": artifact, "entity_id": artifact_id, "file": open(file, 'rb')})))
 
 
 def comment(params):
@@ -275,14 +189,15 @@ def comment(params):
     try:
         artifact, artifact_id, comment = params[1:]
     except Exception as e:
-        help(extra_text="""%s comment <artifact> <artifact_id> <comment>
+        print(help(extra_text="""%s comment <artifact> <artifact_id> <comment>
         
         artifact: yara_rule, c2dns, c2ip, task
         artifact_id: artifact id as an integer
-        comment: the comment to add to the artifact""" % (params[0]), params=params)
+        comment: the comment to add to the artifact""" % (params[0]), params=params))
+        sys.exit(1)
 
-    print(THREATKB_CLI.create("comments", json.dumps(
-        {"comment": comment, "entity_type": ENTITY_TYPES.get(artifact), "entity_id": artifact_id})))
+    print((THREATKB_CLI.create("comments", json.dumps(
+        {"comment": comment, "entity_type": ENTITY_TYPES.get(artifact), "entity_id": artifact_id}))))
 
 
 def release(params):
@@ -293,7 +208,7 @@ def release(params):
     except Exception as e:
         release_id = None
 
-    print(THREATKB_CLI.get("releases", release_id, {"short": 0}))
+    print((THREATKB_CLI.get("releases", release_id, {"short": 0})))
 
 
 def search(params):
@@ -302,12 +217,14 @@ def search(params):
     try:
         filter_, filter_text = params[1:]
     except Exception as e:
-        help(extra_text="""%s search <filter> <filter_text>
+        print(help(extra_text="""%s search <filter> <filter_text>
         
         filter: all, tag, state, category
-        filter_text: text to filter on""" % (params[0]), params=params)
+        filter_text: text to filter on""" % (params[0]), params=params))
+        sys.exit(1)
 
-    print(THREATKB_CLI.get("search", params={filter_: filter_text}))
+
+    print((THREATKB_CLI.get("search", params={filter_: filter_text})))
 
 
 def help(params, extra_text="", exit=True):
@@ -352,7 +269,7 @@ def main():
     try:
         action = params[0]
     except:
-        print(help(sys.argv))
+        print((help(sys.argv)))
         sys.exit(1)
 
     if args.filter_keys_only:
@@ -373,7 +290,8 @@ def main():
         initialize()
         search(params)
     else:
-        help(sys.argv)
+        print(help(sys.argv))
+        sys.exit(1)
 
 
 if __name__ == "__main__":
